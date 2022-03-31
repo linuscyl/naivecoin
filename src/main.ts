@@ -1,5 +1,7 @@
 import * as  bodyParser from 'body-parser';
 import * as express from 'express';
+import * as mongoose from 'mongoose';
+import * as redis from 'redis';
 import * as _ from 'lodash';
 import {
     Block, generateNextBlock, generatenextBlockWithTransaction, generateRawNextBlock, getAccountBalance,
@@ -13,10 +15,83 @@ import {getPublicFromWallet, initWallet} from './wallet';
 const httpPort: number = parseInt(process.env.HTTP_PORT) || 3001;
 const p2pPort: number = parseInt(process.env.P2P_PORT) || 6001;
 
+
+
 const initHttpServer = (myHttpPort: number) => {
     const app = express();
     app.use(bodyParser.json());
+    var redisResult;
+    var dbResult;
+    var max_index=-1;
+    const redisUrl = 'redis://localhost:6379';
+    const redisClient = redis.createClient();
+    redisClient.on("error", function(error) {
+        console.error(error);
+    });
+    
+    
+    app.post('/redis', (req, res) => {
 
+        var call = redisClient.get(req.body.input,function (error, value) { redisResult=value;console.log(redisResult);res.send(redisResult);})
+ 
+        
+    });
+
+    interface Blocks extends mongoose.Document{
+        index: number;
+        previousHash: string;
+        timestamp: string;
+        data:  JSON;
+        hash:string;
+        difficulty: number;
+        nonce: number;
+    };
+    
+    const schema = new mongoose.Schema({
+        index: { type: String, required: true },
+        previousHash: { type: String, required: false },
+        timestamp: { type: String, required: true },
+        data: { type: JSON, required: true },
+        hash: { type: String, required: true },
+        difficulty: { type: String, required: true },
+        nonce: { type: String, required: true },
+    },{ versionKey: false });
+    
+    const BlocksModel = mongoose.model<Blocks>('Blocks', schema);
+    const mongodbUrl = 'mongodb://localhost:27017/test';
+    mongoose.connect(mongodbUrl).catch(err => console.log(err));
+    var db = mongoose.connection;
+    db.on('error', console.error.bind(console, 'MongoDB connection error:'));
+
+    app.get('/dbw', (req, res) => {
+    
+        var list = [];
+        for (let index=max_index+1;;index++,max_index++ )
+        {
+            if(getBlockchain()[index]==undefined){break;}
+            var data:Block = getBlockchain()[index];
+            var doc = new BlocksModel(data);
+            doc.save().catch(err => console.log(err));
+            list.push(doc);
+        }
+        res.send(list);
+
+    });
+    app.get('/dbr', (req, res) => {
+    
+        var data = BlocksModel.find({}, { _id: 0 }).exec(function (error, value) { dbResult=value});
+        dbResult.forEach(element => {
+            const Objects:Block = element;
+            redisClient.set(String(Objects.index)+":index",String(Objects.index));
+            redisClient.set(String(Objects.index)+":previousHash",Objects.previousHash);
+            redisClient.set(String(Objects.index)+":timestamp",String(Objects.timestamp));
+            redisClient.set(String(Objects.index)+":data",JSON.stringify(Objects.data));
+            redisClient.set(String(Objects.index)+":hash",Objects.hash);
+            redisClient.set(String(Objects.index)+":difficulty",String(Objects.difficulty));
+            redisClient.set(String(Objects.index)+":nonce",String(Objects.nonce));
+        });
+        res.send(dbResult);
+    });
     app.use((err, req, res, next) => {
         if (err) {
             res.status(400).send(err.message);
