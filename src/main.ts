@@ -78,7 +78,7 @@ const initHttpServer = (myHttpPort: number) => {
 
     });
     app.get('/dbr', (req, res) => {
-    
+        var indexCounter;
         var data = BlocksModel.find({}, { _id: 0 }).exec(function (error, value) { dbResult=value});
         dbResult.forEach(element => {
             const Objects:Block = element;
@@ -89,7 +89,9 @@ const initHttpServer = (myHttpPort: number) => {
             redisClient.set(String(Objects.index)+":hash",Objects.hash);
             redisClient.set(String(Objects.index)+":difficulty",String(Objects.difficulty));
             redisClient.set(String(Objects.index)+":nonce",String(Objects.nonce));
+            indexCounter+=1;
         });
+        max_index = indexCounter;
         res.send(dbResult);
     });
     app.use((err, req, res, next) => {
