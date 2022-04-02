@@ -175,12 +175,13 @@ const broadcastLatest = (): void => {
 };
 
 const connectToPeers = (newPeer: string): void => {
-    const ws: WebSocket = new WebSocket(newPeer);
+    const ws: WebSocket = new WebSocket(`ws://localhost:${newPeer}/`);
     ws.on('open', () => {
         initConnection(ws);
+        console.log('listening websocket p2p port on: ' + newPeer);
     });
-    ws.on('error', () => {
-        console.log('connection failed');
+    ws.on('error', (err) => {
+        console.log('connection failed to' + newPeer , err);
     });
 };
 
@@ -188,4 +189,4 @@ const broadCastTransactionPool = () => {
     broadcast(responseTransactionPoolMsg());
 };
 
-export {connectToPeers, broadcastLatest, broadCastTransactionPool, initP2PServer, getSockets};
+export {connectToPeers, broadcastLatest, broadCastTransactionPool, initP2PServer, getSockets,initConnection};

@@ -5,13 +5,19 @@ import {
     Block, generateNextBlock, generatenextBlockWithTransaction, generateRawNextBlock, getAccountBalance,
     getBlockchain, getMyUnspentTransactionOutputs, getUnspentTxOuts, sendTransaction
 } from './blockchain';
-import {connectToPeers, getSockets, initP2PServer} from './p2p';
+import {connectToPeers, getSockets, initP2PServer,initConnection} from './p2p';
 import {UnspentTxOut} from './transaction';
 import {getTransactionPool} from './transactionPool';
 import {getPublicFromWallet, initWallet} from './wallet';
+import * as WebSocket from 'ws';
+import {Server} from 'ws';
 
-const httpPort: number = parseInt(process.env.HTTP_PORT) || 3001;
+let httpPort: number = parseInt(process.env.HTTP_PORT) || 3001;
 const p2pPort: number = parseInt(process.env.P2P_PORT) || 6001;
+
+if (process.argv[2] != undefined) {
+    httpPort =  parseInt(process.argv[2]);
+}
 
 const initHttpServer = (myHttpPort: number) => {
     const app = express();
@@ -121,8 +127,9 @@ const initHttpServer = (myHttpPort: number) => {
     app.get('/peers', (req, res) => {
         res.send(getSockets().map((s: any) => s._socket.remoteAddress + ':' + s._socket.remotePort));
     });
-    app.post('/addPeer', (req, res) => {
-        connectToPeers(req.body.peer);
+    app.get('/addPeer/:port', (req, res) => {
+        console.log(req.params.port);
+        connectToPeers(req.params.port);
         res.send();
     });
 
@@ -131,11 +138,25 @@ const initHttpServer = (myHttpPort: number) => {
         process.exit();
     });
 
-    app.listen(myHttpPort, () => {
+    const server = app.listen(myHttpPort, () => {
         console.log('Listening http on port: ' + myHttpPort);
+    });
+
+    const wss: Server = new WebSocket.Server({server: server});
+    wss.on('connection', (ws: WebSocket) => {
+        console.log(ws,'is connected to server',myHttpPort)
+        initConnection(ws);
+    });
+
+    wss.on('open', () => {
+        // initConnection(ws);
+        console.log('listening websocket p2p port on: ',wss.path);
+    });
+    wss.on('error', (err) => {
+        console.log('connection failed to' + wss.path , err);
     });
 };
 
 initHttpServer(httpPort);
-initP2PServer(p2pPort);
+// initP2PServer(p2pPort);
 initWallet();
