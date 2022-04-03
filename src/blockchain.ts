@@ -20,7 +20,7 @@ class Block {
     public merkleRoot?: string;
 
     constructor(index: number, hash: string, previousHash: string,
-                timestamp: number, data: Transaction[], difficulty: number, nonce: number, merkleRoot) {
+                timestamp: number, data: Transaction[], difficulty: number, nonce: number, merkleRoot:string) {
         this.index = index;
         this.previousHash = previousHash;
         this.timestamp = timestamp;
@@ -32,26 +32,37 @@ class Block {
     }
 }
 
-const genesisTransaction = [{
-    'txIns': [{'signature': '', 'txOutId': '', 'txOutIndex': 0}],
+const genesisTransactions = [{
+    'txIns': [{'signature': 'abcsignature', 'txOutId': 'abctxoutID', 'txOutIndex': 0}],
     'txOuts': [{
-        'address': '04bfcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a',
+        'address': 'abcfcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a',
         'amount': 50
     }],
-    'id': 'e655f6a5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+    'id': 'abcccca5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
 },
 {
-    'txIns': [{'signature': '', 'txOutId': '', 'txOutIndex': 1}],
+    'txIns': [{'signature': 'defsignature', 'txOutId': 'defOutId', 'txOutIndex': 1}],
     'txOuts': [{
-        'address': 'pkpkpkpkpkpkpkp',
+        'address': 'defpkpkpkpkaddress',
         'amount': 49
     }],
-    'id': 'd655f6a5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+    'id': 'deffffa5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
 }
 ];
 
+const mapGensisTransactionToString  = genesisTransactions.map((genesisTransaction) =>{
+    return genesisTransaction.txIns[0].signature
+            + genesisTransaction.txIns[0].txOutId
+            + genesisTransaction.txIns[0].txOutIndex.toString()
+            + genesisTransaction.txOuts[0].address
+            + genesisTransaction.txOuts[0].amount.toString()
+            + genesisTransaction.id 
+})
+ 
+console.log('mapGensisTransactionToStringgggggggggggg', mapGensisTransactionToString)
+
 const genesisBlock: Block = new Block(
-    0, '91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627', '', 1465154705, genesisTransaction, 0, 0, "linusMerkleRoot"
+    0, '91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627', '', 1465154705, genesisTransactions, 0, 0, "linusMerkleRoot"
 );
 
 let blockchain: Block[] = [genesisBlock];
