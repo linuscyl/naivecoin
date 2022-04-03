@@ -7,6 +7,8 @@ import {
 import {addToTransactionPool, getTransactionPool, updateTransactionPool} from './transactionPool';
 import {hexToBinary} from './util';
 import {createTransaction, findUnspentTxOuts, getBalance, getPrivateFromWallet, getPublicFromWallet} from './wallet';
+import * as hashForMerkle from 'easy-crypto/hash';
+
 
 class Block {
 
@@ -17,9 +19,10 @@ class Block {
     public data: Transaction[];
     public difficulty: number;
     public nonce: number;
+    public merkleRoot?: string;
 
     constructor(index: number, hash: string, previousHash: string,
-                timestamp: number, data: Transaction[], difficulty: number, nonce: number) {
+                timestamp: number, data: Transaction[], difficulty: number, nonce: number, merkleRoot:string) {
         this.index = index;
         this.previousHash = previousHash;
         this.timestamp = timestamp;
@@ -27,20 +30,116 @@ class Block {
         this.hash = hash;
         this.difficulty = difficulty;
         this.nonce = nonce;
+        this.merkleRoot = merkleRoot;
     }
 }
 
-const genesisTransaction = {
-    'txIns': [{'signature': '', 'txOutId': '', 'txOutIndex': 0}],
+class MerkleTreeNodeGeneric<T> {
+    hash: string;
+  
+    compare(node: MerkleTreeNodeGeneric<T>) {
+      return this.hash === node.hash;
+    }
+}
+
+class MerkleTreeChildNode<T> extends MerkleTreeNodeGeneric<T> {
+    hash: string;
+  
+    constructor(public data: T) {
+      super();
+      this.hash = hashForMerkle.hash('sha256', JSON.stringify(data), 'utf-8', 'hex');
+    }
+}
+
+class MerkleTreeNode<T> extends MerkleTreeNodeGeneric<T> {
+    hash: string;
+  
+    constructor(public leftChild: MerkleTreeNodeGeneric<T>, public rightChild: MerkleTreeNodeGeneric<T>) {
+      super();
+      this.hash = hashForMerkle.hash('sha256', leftChild.hash + rightChild.hash, 'hex', 'hex');
+    }
+}
+
+function generateLevel<T>(nodes: MerkleTreeNodeGeneric<T>[]) {
+    console.log('nodesssssss', nodes)
+  const result: MerkleTreeNodeGeneric<T>[] = [];
+  while (nodes.length > 1) {
+    const first = nodes.shift();
+    const second = nodes.shift();
+    result.push(new MerkleTreeNode<T>(first, second));
+  }
+  if (nodes.length == 1) {
+    const last = nodes.shift();
+    result.push(new MerkleTreeNode<T>(last, undefined));
+  }
+  return result;
+}
+
+class MerkleTree<T> {
+    root: MerkleTreeNodeGeneric<T>;
+  
+    constructor(documents: T[]) {
+      let nodes: MerkleTreeNodeGeneric<T>[] = documents.map(data => new MerkleTreeChildNode<T>(data));
+      while (nodes.length > 1) {
+        nodes = generateLevel(nodes);
+      }
+      this.root = nodes[0];
+    }
+  
+    compare(tree: MerkleTree<T>) {
+      return this.root.compare(tree.root);
+    }
+  }
+
+const genesisTransactions = [{
+    'txIns': [{'signature': 'aaasignature', 'txOutId': 'abctxoutID', 'txOutIndex': 0}],
     'txOuts': [{
-        'address': '04bfcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a',
+        'address': 'aaafcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a',
         'amount': 50
     }],
-    'id': 'e655f6a5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
-};
+    'id': 'aaadewa5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+},
+{
+    'txIns': [{'signature': 'bbbsignature', 'txOutId': 'defOutId', 'txOutIndex': 1}],
+    'txOuts': [{
+        'address': 'bbbpkpkpkpkaddress',
+        'amount': 49
+    }],
+    'id': 'bbbdefa5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+},
+{
+    'txIns': [{'signature': 'cccsignature', 'txOutId': 'defOutId', 'txOutIndex': 1}],
+    'txOuts': [{
+        'address': 'cccpkpkpkpkaddress',
+        'amount': 49
+    }],
+    'id': 'cccca5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+},
+{
+    'txIns': [{'signature': 'dddsignature', 'txOutId': 'defOutId', 'txOutIndex': 1}],
+    'txOuts': [{
+        'address': 'dddddpkpkpkpkaddress',
+        'amount': 49
+    }],
+    'id': 'ddda5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3'
+}
+];
 
+const mapGensisTransactionToString  = genesisTransactions.map((genesisTransaction) =>{
+    return genesisTransaction.txIns[0].signature
+            + genesisTransaction.txIns[0].txOutId
+            + genesisTransaction.txIns[0].txOutIndex.toString()
+            + genesisTransaction.txOuts[0].address
+            + genesisTransaction.txOuts[0].amount.toString()
+            + genesisTransaction.id 
+});
+
+const finalNode = new MerkleTree<string>(mapGensisTransactionToString);
+
+console.log('finalNode', finalNode)
+ 
 const genesisBlock: Block = new Block(
-    0, '91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627', '', 1465154705, [genesisTransaction], 0, 0
+    0, '91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627', '', 1465154705, genesisTransactions, 0, 0, finalNode.root.hash
 );
 
 let blockchain: Block[] = [genesisBlock];
@@ -95,7 +194,7 @@ const generateRawNextBlock = (blockData: Transaction[]) => {
     const difficulty: number = getDifficulty(getBlockchain());
     const nextIndex: number = previousBlock.index + 1;
     const nextTimestamp: number = getCurrentTimestamp();
-    const newBlock: Block = findBlock(nextIndex, previousBlock.hash, nextTimestamp, blockData, difficulty);
+    const newBlock: Block = findBlock(nextIndex, previousBlock.hash, nextTimestamp, blockData, difficulty, previousBlock.merkleRoot);
     if (addBlockToChain(newBlock)) {
         broadcastLatest();
         return newBlock;
@@ -129,12 +228,12 @@ const generatenextBlockWithTransaction = (receiverAddress: string, amount: numbe
     return generateRawNextBlock(blockData);
 };
 
-const findBlock = (index: number, previousHash: string, timestamp: number, data: Transaction[], difficulty: number): Block => {
+const findBlock = (index: number, previousHash: string, timestamp: number, data: Transaction[], difficulty: number, merkleRoot: string): Block => {
     let nonce = 0;
     while (true) {
-        const hash: string = calculateHash(index, previousHash, timestamp, data, difficulty, nonce);
+        const hash: string = calculateHash(index, previousHash, timestamp, data, difficulty, nonce, merkleRoot);
         if (hashMatchesDifficulty(hash, difficulty)) {
-            return new Block(index, hash, previousHash, timestamp, data, difficulty, nonce);
+            return new Block(index, hash, previousHash, timestamp, data, difficulty, nonce, merkleRoot);
         }
         nonce++;
     }
@@ -152,11 +251,11 @@ const sendTransaction = (address: string, amount: number): Transaction => {
 };
 
 const calculateHashForBlock = (block: Block): string =>
-    calculateHash(block.index, block.previousHash, block.timestamp, block.data, block.difficulty, block.nonce);
+    calculateHash(block.index, block.previousHash, block.timestamp, block.data, block.difficulty, block.nonce, block.merkleRoot);
 
 const calculateHash = (index: number, previousHash: string, timestamp: number, data: Transaction[],
-                       difficulty: number, nonce: number): string =>
-    CryptoJS.SHA256(index + previousHash + timestamp + data + difficulty + nonce).toString();
+                       difficulty: number, nonce: number, merkleRoot:string): string =>
+    CryptoJS.SHA256(index + previousHash + timestamp + data + difficulty + nonce + merkleRoot).toString();
 
 const isValidBlockStructure = (block: Block): boolean => {
     return typeof block.index === 'number'
