@@ -3,6 +3,7 @@ import {existsSync, readFileSync, unlinkSync, writeFileSync} from 'fs';
 import * as _ from 'lodash';
 import {getPublicKey, getTransactionId, signTxIn, Transaction, TxIn, TxOut, UnspentTxOut} from './transaction';
 
+
 const EC = new ec('secp256k1');
 const privateKeyLocation = process.env.PRIVATE_KEY || 'node/wallet/private_key';
 
@@ -50,33 +51,6 @@ const findUnspentTxOuts = (ownerAddress: string, unspentTxOuts: UnspentTxOut[]) 
     return _.filter(unspentTxOuts, (uTxO: UnspentTxOut) => uTxO.address === ownerAddress);
 };
 
-const findTxOutsForAmount = (amount: number, myUnspentTxOuts: UnspentTxOut[]) => {
-    let currentAmount = 0;
-    const includedUnspentTxOuts = [];
-    for (const myUnspentTxOut of myUnspentTxOuts) {
-        includedUnspentTxOuts.push(myUnspentTxOut);
-        currentAmount = currentAmount + myUnspentTxOut.amount;
-        if (currentAmount >= amount) {
-            const leftOverAmount = currentAmount - amount;
-            return {includedUnspentTxOuts, leftOverAmount};
-        }
-    }
-
-    const eMsg = 'Cannot create transaction from the available unspent transaction outputs.' +
-        ' Required amount:' + amount + '. Available unspentTxOuts:' + JSON.stringify(myUnspentTxOuts);
-    throw Error(eMsg);
-};
-
-const createTxOuts = (receiverAddress: string, myAddress: string, amount, leftOverAmount: number) => {
-    const txOut1: TxOut = new TxOut(receiverAddress, amount);
-    if (leftOverAmount === 0) {
-        return [txOut1];
-    } else {
-        const leftOverTx = new TxOut(myAddress, leftOverAmount);
-        return [txOut1, leftOverTx];
-    }
-};
-
 const filterTxPoolTxs = (unspentTxOuts: UnspentTxOut[], transactionPool: Transaction[]): UnspentTxOut[] => {
     const txIns: TxIn[] = _(transactionPool)
         .map((tx: Transaction) => tx.txIns)
@@ -102,16 +76,41 @@ const createTransaction = (receiverAddress: string, amount: number, privateKey: 
                            unspentTxOuts: UnspentTxOut[], txPool: Transaction[]): Transaction => {
 
     console.log('txPool: %s', JSON.stringify(txPool));
-    const myAddress: string = getPublicKey(privateKey);
-    const myUnspentTxOutsA = unspentTxOuts.filter((uTxO: UnspentTxOut) => uTxO.address === myAddress);
-
+    const address = getPublicKey(privateKey); // Get the public key by private key
+    const myUnspentTxOutsA = unspentTxOuts.filter((uTxO: UnspentTxOut) => uTxO.address === address);
     const myUnspentTxOuts = filterTxPoolTxs(myUnspentTxOutsA, txPool);
+    const includedUnspentTxOuts = [];
+    let leftTxOut = null;
+    let currentAmount = 0;
+    let leftOverAmount = 0;
 
-    // filter from unspentOutputs such inputs that are referenced in pool
-    const {includedUnspentTxOuts, leftOverAmount} = findTxOutsForAmount(amount, myUnspentTxOuts);
+    // Check if no UTxO in pool
+    if (myUnspentTxOuts.length === 0) {
+        const g = 'Cannot create transaction because the transaction require: ' + amount;
+        throw Error(g + ' No transaction make');
+    }
+    // If UTxO in pool, calculate amount
+    for (let i = 0; i < myUnspentTxOuts.length; i++) {
+        includedUnspentTxOuts.push(myUnspentTxOuts[i]);
+        currentAmount += myUnspentTxOuts[i].amount;
+        console.log('currentAmount: ' + currentAmount);
+        console.log('amount: ' + amount);
+        if (currentAmount >= amount) {     // Transaction successful
+            leftOverAmount = currentAmount - amount;
+            i = myUnspentTxOuts.length;
+        }
+        if (currentAmount < amount  && i === myUnspentTxOuts.length - 1) {
+            const msg = 'Cannot create transaction because the transaction require: ' + amount + ' Only have: ' + currentAmount;
+            throw Error (msg);
+        }
+    }
+
+    if (leftOverAmount > 0) {
+        leftTxOut = new TxOut(address, leftOverAmount);
+    }
 
     const toUnsignedTxIn = (unspentTxOut: UnspentTxOut) => {
-        const txIn: TxIn = new TxIn();
+        const txIn = new TxIn();
         txIn.txOutId = unspentTxOut.txOutId;
         txIn.txOutIndex = unspentTxOut.txOutIndex;
         return txIn;
@@ -119,13 +118,20 @@ const createTransaction = (receiverAddress: string, amount: number, privateKey: 
 
     const unsignedTxIns: TxIn[] = includedUnspentTxOuts.map(toUnsignedTxIn);
 
-    const tx: Transaction = new Transaction();
-    tx.txIns = unsignedTxIns;
-    tx.txOuts = createTxOuts(receiverAddress, myAddress, amount, leftOverAmount);
-    tx.id = getTransactionId(tx);
+    console.log('TXIN ID' + toUnsignedTxIn);
 
+    const tx: Transaction = new Transaction();
+    const txOut = new TxOut (receiverAddress, amount);
+    tx.txIns = unsignedTxIns;
+    if (leftTxOut != null) {
+        tx.txOuts = [txOut, leftTxOut];     // If leftTxOut exist, add it into transaction
+    } else {
+        tx.txOuts = [txOut];
+    }
+    //   tx.txOuts = createTxOuts(receiverAddress, address, amount, leftOverAmount);
+    tx.id = getTransactionId(tx);
     tx.txIns = tx.txIns.map((txIn: TxIn, index: number) => {
-        txIn.signature = signTxIn(tx, index, privateKey, unspentTxOuts);
+        txIn.signature = signTxIn(tx, index, privateKey);
         return txIn;
     });
 
