@@ -362,6 +362,7 @@ const addBlockToChain = (newBlock: Block): boolean => {
             console.log('block is not valid in terms of transactions');
             return false;
         } else {
+            console.log('New block is valid, adding to the chain')
             blockchain.push(newBlock);
             setUnspentTxOuts(retVal);
             updateTransactionPool(unspentTxOuts);

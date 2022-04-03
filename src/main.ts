@@ -218,8 +218,8 @@ const initHttpServer = (myHttpPort: number) => {
     });
 
     const wss: Server = new WebSocket.Server({server: server});
-    wss.on('connection', (ws: WebSocket) => {
-        console.log(ws,'is connected to server',myHttpPort)
+    wss.on('connection', (ws: WebSocket,req) => {
+        console.log(req.socket.remotePort,'is connected to server',myHttpPort)
         initConnection(ws);
     });
 

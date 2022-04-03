@@ -106,8 +106,13 @@ const initMessageHandler = (ws: WebSocket) => {
 };
 
 const write = (ws: WebSocket, message: Message): void => ws.send(JSON.stringify(message));
-const broadcast = (message: Message): void => sockets.forEach((socket) => write(socket, message));
-
+const broadcast = (message: Message): void => 
+    sockets.forEach((socket:any) => {
+        console.log('boardcasting to ' + socket._socket.remotePort)
+        write(socket, message);
+       
+        
+})
 const queryChainLengthMsg = (): Message => ({'type': MessageType.QUERY_LATEST, 'data': null});
 
 const queryAllMsg = (): Message => ({'type': MessageType.QUERY_ALL, 'data': null});
