@@ -5,7 +5,7 @@ import * as redis from 'redis';
 import * as _ from 'lodash';
 import {
     Block, generateNextBlock, generatenextBlockWithTransaction, generateRawNextBlock, getAccountBalance,
-    getBlockchain, getMyUnspentTransactionOutputs, getUnspentTxOuts, sendTransaction
+    getBlockchain, getMyUnspentTransactionOutputs, getUnspentTxOuts, override, sendTransaction
 } from './blockchain';
 import {connectToPeers, getSockets, initP2PServer,initConnection} from './p2p';
 import {UnspentTxOut} from './transaction';
@@ -34,10 +34,10 @@ const initHttpServer = (myHttpPort: number) => {
     });
     
     
-    app.post('/redis', (req, res) => {
+    app.get('/redis', (req, res) => {
 
-        var call = redisClient.get(req.body.input,function (error, value) { redisResult=value;console.log(redisResult);res.send(redisResult);})
- 
+        var vall = redisClient.get((max_index).toString()+":data",function (error, value) { 
+            redisResult=value;res.send(redisResult);})
         
     });
 
@@ -49,16 +49,18 @@ const initHttpServer = (myHttpPort: number) => {
         hash:string;
         difficulty: number;
         nonce: number;
+        //merkleRoot: string;   
     };
     
     const schema = new mongoose.Schema({
-        index: { type: String, required: true },
+        index: { type: Number, required: true },
         previousHash: { type: String, required: false },
         timestamp: { type: String, required: true },
         data: { type: JSON, required: true },
         hash: { type: String, required: true },
-        difficulty: { type: String, required: true },
-        nonce: { type: String, required: true },
+        difficulty: { type: Number, required: true },
+        nonce: { type: Number, required: true },
+        //merkleRoot  : { type: String, required: true },
     },{ versionKey: false });
     
     const BlocksModel = mongoose.model<Blocks>('Blocks', schema);
@@ -67,25 +69,35 @@ const initHttpServer = (myHttpPort: number) => {
     var db = mongoose.connection;
     db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
-    app.get('/dbw', (req, res) => {
+    app.get('/write', (req, res) => {
     
         var list = [];
-        for (let index=max_index+1;;index++,max_index++ )
+
+        for (let index=max_index+1;;index++ )
         {
-            if(getBlockchain()[index]==undefined){break;}
-            var data:Block = getBlockchain()[index];
-            var doc = new BlocksModel(data);
-            doc.save().catch(err => console.log(err));
-            list.push(doc);
+            if(getBlockchain()[index]==undefined){
+                break;
+            }
+            else{
+                var data:Block = getBlockchain()[index];
+                var doc = new BlocksModel(data);
+                doc.save().catch(err => console.log(err));
+                max_index++;
+                list.push(doc);
+            }
         }
         res.send(list);
 
     });
-    app.get('/dbr', (req, res) => {
-        var indexCounter;
-        var data = BlocksModel.find({}, { _id: 0 }).exec(function (error, value) { dbResult=value});
+    app.get('/read', (req, res) => {
+        var indexCounter=0;
+        var data = BlocksModel.find({}, { _id: 0 }).exec(function (error, value) { dbResult=value;
         dbResult.forEach(element => {
             const Objects:Block = element;
+            if(dbResult.length-1==Objects.index){
+                max_index = indexCounter;
+                res.send(dbResult);
+            }
             redisClient.set(String(Objects.index)+":index",String(Objects.index));
             redisClient.set(String(Objects.index)+":previousHash",Objects.previousHash);
             redisClient.set(String(Objects.index)+":timestamp",String(Objects.timestamp));
@@ -93,10 +105,13 @@ const initHttpServer = (myHttpPort: number) => {
             redisClient.set(String(Objects.index)+":hash",Objects.hash);
             redisClient.set(String(Objects.index)+":difficulty",String(Objects.difficulty));
             redisClient.set(String(Objects.index)+":nonce",String(Objects.nonce));
+            
+            override(Objects,indexCounter);
             indexCounter+=1;
+            
         });
-        max_index = indexCounter;
-        res.send(dbResult);
+    });
+        
     });
     app.use((err, req, res, next) => {
         if (err) {
